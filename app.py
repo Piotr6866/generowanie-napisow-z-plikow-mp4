@@ -252,8 +252,8 @@ OPENAI_API_KEY = "twój_klucz_api"
 """
     )
 
-st.stop()
-client = OpenAI(api_key=api_key)
+    st.stop()
+    client = OpenAI(api_key=api_key)
 
 # ============================================================
 # WYBÓR PLIKU
