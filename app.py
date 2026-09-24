@@ -627,7 +627,7 @@ wyniki = st.session_state.wyniki
 # ========================================================
 # MP3
 # ========================================================
-
+st.stop()
 audio_path = wyniki["audio_path"]
 
 if os.path.exists(audio_path):
