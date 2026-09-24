@@ -1,8 +1,4 @@
-openai
-python-dotenv
 streamlit
-streamlit-audiorecorder
+openai
 pydub
-tkinter 
-subprocess
-time
+python-dotenv
