@@ -5,11 +5,14 @@ from pathlib import Path
 
 import streamlit as st
 from openai import OpenAI
+from dotenv import dotenv_values
 
 
 # ============================================================
 # KONFIGURACJA STREAMLIT
 # ============================================================
+
+env = dotenv_values(".env")
 
 st.set_page_config(
     page_title="Generowanie napisów do filmów MP4",
@@ -20,6 +23,8 @@ st.set_page_config(
 # ============================================================
 # FUNKCJE POMOCNICZE
 # ============================================================
+def get_openai_client():
+    return OpenAI(api_key=st.session_state["openai_api_key"])
 
 def formatuj_czas_srt(seconds):
     """
@@ -232,8 +237,21 @@ Wygenerowane pliki można następnie pobrać na swój komputer.
 # ============================================================
 # KLUCZ OPENAI
 # ============================================================
+# OpenAI API key protection
+if not st.session_state.get("openai_api_key"):
+    if "OPENAI_API_KEY" in env:
+        st.session_state["openai_api_key"] = env["OPENAI_API_KEY"]
 
-api_key = pobierz_api_key()
+    else:
+        st.info("Dodaj swój klucz API OpenAI aby móc korzystać z tej aplikacji")
+        st.session_state["openai_api_key"] = st.text_input("Klucz API", type="password")
+        if st.session_state["openai_api_key"]:
+            st.rerun()
+
+if not st.session_state.get("openai_api_key"):
+    st.stop()
+# =============================================================
+api_key = st.session_state["openai_api_key"]  # pobierz_api_key()
 
 if not api_key:
 
