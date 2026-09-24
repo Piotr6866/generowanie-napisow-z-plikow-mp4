@@ -252,7 +252,7 @@ OPENAI_API_KEY = "twój_klucz_api"
 """
     )
 
-    st.stop()
+st.stop()
 client = OpenAI(api_key=api_key)
 
 # ============================================================
@@ -477,7 +477,7 @@ if uploaded_file is not None:
                 srt_content
             )
 
-        st.stop()
+
         # ------------------------------------------------
         # TŁUMACZENIE NA POLSKI
         # ------------------------------------------------
