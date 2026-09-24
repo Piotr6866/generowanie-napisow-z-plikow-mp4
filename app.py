@@ -477,7 +477,7 @@ if uploaded_file is not None:
                 srt_content
             )
 
-
+        st.stop()
         # ------------------------------------------------
         # TŁUMACZENIE NA POLSKI
         # ------------------------------------------------
