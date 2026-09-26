@@ -2,7 +2,7 @@ import os
 import subprocess
 import tempfile
 from pathlib import Path
-
+from dotenv import dotenv_values  ###
 import streamlit as st
 from openai import OpenAI
 
@@ -170,17 +170,27 @@ def pobierz_api_key():
     Pobiera OPENAI_API_KEY.
 
     Priorytet:
-    1. Streamlit Secrets
-    2. zmienna środowiskowa
+    1. zmienna środowiskowa
+    2. klucz podany przez użytkownika
     """
 
-    try:
-        api_key = st.secrets.get("OPENAI_API_KEY")
-    except Exception:
-        api_key = None
+    #try:
+    #    api_key = st.secrets.get("OPENAI_API_KEY")
+    #except Exception:
+    #    api_key = None
 
-    if not api_key:
-        api_key = os.getenv("OPENAI_API_KEY")
+    #if not api_key:
+    #api_key = os.getenv("OPENAI_API_KEY")
+
+    env = dotenv_values(".env")
+
+    if "OPENAI_API_KEY" in env:
+            api_key = env["OPENAI_API_KEY"]
+    else:
+        st.info("Dodaj swój klucz API OpenAI aby móc korzystać z tej aplikacji")
+        api_key = st.text_input("Klucz API", type="password")
+        #if st.session_state["openai_api_key"]:
+        #    st.rerun()
 
     return api_key
 
@@ -262,351 +272,375 @@ client = OpenAI(api_key=api_key)
 if not st.session_state.przetwarzanie_zakonczone:
 
     uploaded_file = st.file_uploader(
-    "Wybierz plik MP4",
-    type=["mp4"],
-    help="Wybierz film, dla którego chcesz wygenerować napisy."
-)
+        "Wybierz plik MP4",
+        type=["mp4"],
+        help="Wybierz film, dla którego chcesz wygenerować napisy."
+    )
 
 
 # ========================================================
 # PRZETWARZANIE
 # ========================================================
 
-if uploaded_file is not None:
+    if uploaded_file is not None:
 
-    st.info("### Przetwarzanie w toku...")
+        st.info("### Przetwarzanie w toku...")
 
-    try:
+        try:  
 
-        # ------------------------------------------------
-        # KATALOG TYMCZASOWY
-        # ------------------------------------------------
+                # ------------------------------------------------
+                # KATALOG TYMCZASOWY
+                # ------------------------------------------------
 
-        temp_dir = tempfile.mkdtemp()
+                temp_dir = tempfile.mkdtemp()
 
-        original_name = Path(uploaded_file.name).stem
+                original_name = Path(uploaded_file.name).stem
 
-        video_path = os.path.join(
-            temp_dir,
-            uploaded_file.name
-        )
-
-        audio_path = os.path.join(
-            temp_dir,
-            f"{original_name}.mp3"
-        )
-
-        txt_path = os.path.join(
-            temp_dir,
-            f"{original_name}.txt"
-        )
-
-        srt_path = os.path.join(
-            temp_dir,
-            f"{original_name}.srt"
-        )
-
-        translated_srt_path = os.path.join(
-            temp_dir,
-            f"{original_name}_tłumaczenie_na_pl.srt"
-        )
-
-        output_mp4_path = os.path.join(
-            temp_dir,
-            f"{original_name}_z_napisami.mp4"
-        )
-
-
-        # ------------------------------------------------
-        # ZAPISANIE UPLOADED FILE NA DYSKU
-        # ------------------------------------------------
-
-        with open(video_path, "wb") as video_file:
-
-            video_file.write(
-                uploaded_file.getbuffer()
-            )
-
-
-        # ------------------------------------------------
-        # SPRAWDZENIE ROZMIARU PLIKU
-        # ------------------------------------------------
-
-        video_size_mb = os.path.getsize(video_path) / (
-            1024 * 1024
-        )
-
-        st.write(
-            f"📁 Wybrany plik: **{uploaded_file.name}**"
-        )
-
-        st.write(
-            f"📦 Rozmiar pliku: **{video_size_mb:.2f} MB**"
-        )
-
-
-        # ------------------------------------------------
-        # WYCIĄGNIĘCIE AUDIO Z MP4
-        # ------------------------------------------------
-
-        st.write("🎵 Wyodrębnianie ścieżki audio...")
-
-        ffmpeg_audio_command = [
-            "ffmpeg",
-            "-y",
-            "-i",
-            video_path,
-            "-vn",
-            "-acodec",
-            "libmp3lame",
-            "-q:a",
-            "2",
-            audio_path
-        ]
-
-        subprocess.run(
-            ffmpeg_audio_command,
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE
-        )
-
-
-        # ------------------------------------------------
-        # TRANSKRYPCJA
-        # ------------------------------------------------
-
-        st.write(
-            "🎙️ Rozpoznawanie mowy..."
-        )
-
-        with open(audio_path, "rb") as audio_file:
-
-            transcript = (
-                client.audio.transcriptions.create(
-                    file=audio_file,
-                    model="whisper-1",
-                    response_format="verbose_json",
-                    timestamp_granularities=["segment"]
-                )
-            )
-
-
-        # ------------------------------------------------
-        # SEGMENTY
-        # ------------------------------------------------
-
-        segments = [
-            {
-                "start": segment.start,
-                "end": segment.end,
-                "text": segment.text.strip()
-            }
-            for segment in transcript.segments
-        ]
-
-
-        if not segments:
-            raise ValueError(
-                "Transkrypcja nie zawiera żadnych segmentów."
-            )
-
-
-        detected_language = (
-            transcript.language
-            if transcript.language
-            else "unknown"
-        )
-
-
-        st.write(
-            f"🌐 Wykryty język: **{detected_language}**"
-        )
-
-
-        # ------------------------------------------------
-        # PLIK TXT
-        # ------------------------------------------------
-
-        st.write(
-            "📝 Tworzenie pliku TXT..."
-        )
-
-        with open(
-            txt_path,
-            "w",
-            encoding="utf-8"
-        ) as txt_file:
-
-            for segment in segments:
-
-                start_time = formatuj_czas_srt(
-                    segment["start"]
+                video_path = os.path.join(
+                    temp_dir,
+                    uploaded_file.name
                 )
 
-                end_time = formatuj_czas_srt(
-                    segment["end"]
+                audio_path = os.path.join(
+                    temp_dir,
+                    f"{original_name}.mp3"
                 )
 
-                txt_file.write(
-                    f"{start_time} - "
-                    f"{end_time} - "
-                    f"{segment['text'].strip()}\n"
+                txt_path = os.path.join(
+                    temp_dir,
+                    f"{original_name}.txt"
+                )
+
+                srt_path = os.path.join(
+                    temp_dir,
+                    f"{original_name}.srt"
+                )
+
+                translated_srt_path = os.path.join(
+                    temp_dir,
+                    f"{original_name}_tłumaczenie_na_pl.srt"
+                )
+
+                output_mp4_path = os.path.join(
+                    temp_dir,
+                    f"{original_name}_z_napisami.mp4"
                 )
 
 
-        # ------------------------------------------------
-        # PLIK SRT
-        # ------------------------------------------------
+                # ------------------------------------------------
+                # ZAPISANIE UPLOADED FILE NA DYSKU
+                # ------------------------------------------------
 
-        st.write(
-            "🎞️ Tworzenie pliku SRT..."
-        )
+                with open(video_path, "wb") as video_file:
 
-        srt_content = utworz_srt(
-            segments
-        )
-
-        with open(
-            srt_path,
-            "w",
-            encoding="utf-8"
-        ) as srt_file:
-
-            srt_file.write(
-                srt_content
-            )
+                    video_file.write(
+                        uploaded_file.getbuffer()
+                    )
 
 
-        # ------------------------------------------------
-        # TŁUMACZENIE NA POLSKI
-        # ------------------------------------------------
+                # ------------------------------------------------
+                # SPRAWDZENIE ROZMIARU PLIKU
+                # ------------------------------------------------
 
-        translated_srt_content = None
-
-        language_lower = detected_language.lower()
-
-        if language_lower not in (
-            "polish",
-            "polski",
-            "pl"
-        ):
-
-            st.write(
-                "🇵🇱 Tłumaczenie napisów na język polski..."
-            )
-
-            translated_segments = (
-                przetlumacz_segmenty(
-                    client,
-                    segments,
-                    detected_language
+                video_size_mb = os.path.getsize(video_path) / (
+                    1024 * 1024
                 )
-            )
 
-            translated_srt_content = (
-                utworz_srt(
-                    translated_segments
+                st.write(
+                    f"📁 Wybrany plik: **{uploaded_file.name}**"
                 )
-            )
 
-            with open(
-                translated_srt_path,
-                "w",
-                encoding="utf-8"
-            ) as translated_file:
-
-                translated_file.write(
-                    translated_srt_content
+                st.write(
+                    f"📦 Rozmiar pliku: **{video_size_mb:.2f} MB**"
                 )
 
 
-        # ------------------------------------------------
-        # OSADZENIE NAPISÓW W MP4
-        # ------------------------------------------------
+                # ------------------------------------------------
+                # WYCIĄGNIĘCIE AUDIO Z MP4
+                # ------------------------------------------------
 
-        st.write(
-            "🎬 Osadzanie napisów w pliku MP4..."
-        )
+                st.write("🎵 Wyodrębnianie ścieżki audio...")
 
-        ffmpeg_command = [
-            "ffmpeg",
-            "-y",
+                ffmpeg_audio_command = [
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    video_path,
+                    "-vn",
+                    "-acodec",
+                    "mp3",
+                    "-q:a",
+                    "2",
+                    audio_path
+                ]
 
-            "-i",
-            video_path,
+                #subprocess.run(  #"libmp3lame",
+                #    ffmpeg_audio_command,
+                #    check=True,
+                #    stdout=subprocess.DEVNULL,
+                #    stderr=subprocess.PIPE
+                #)
 
-            "-i",
-            srt_path,
+                result = subprocess.run(
+                    ffmpeg_audio_command,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True
+                )
 
-            "-map",
-            "0:v",
+                if result.returncode != 0:
 
-            "-map",
-            "0:a?",
+                    st.error("FFmpeg nie mógł wyodrębnić ścieżki audio.")
 
-            "-map",
-            "1:0",
+                    st.code(
+                        result.stderr,
+                        language="text"
+                    )
 
-            "-c:v",
-            "copy",
-
-            "-c:a",
-            "copy",
-
-            "-c:s",
-            "mov_text",
-
-            "-metadata:s:s:0",
-            "language=und",
-
-            "-metadata:s:s:0",
-            f"title=Napisy {detected_language}",
-
-            output_mp4_path
-        ]
-
-
-        subprocess.run(
-            ffmpeg_command,
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE
-        )
+                    st.stop()
 
 
-        # ------------------------------------------------
-        # ZAPIS W SESSION STATE
-        # ------------------------------------------------
+                # ------------------------------------------------
+                # TRANSKRYPCJA
+                # ------------------------------------------------
 
-        st.session_state.wyniki = {
-            "audio_path": audio_path,
-            "txt_path": txt_path,
-            "srt_path": srt_path,
-            "translated_srt_path": (
-                translated_srt_path
-                if translated_srt_content is not None
-                else None
-            ),
-            "output_mp4_path": output_mp4_path,
-            "original_name": original_name,
-            "language": detected_language
-        }
+                st.write(
+                    "🎙️ Rozpoznawanie mowy..."
+                )
 
-        st.session_state.przetwarzanie_zakonczone = True
+                with open(audio_path, "rb") as audio_file:
+                    mp3_size_mb = Path(audio_path).stat().st_size / (1024 * 1024)
 
-        st.rerun()
+                    st.info(
+                        f"Rozmiar pliku MP3 wysyłanego do Whisper: "
+                        f"{mp3_size_mb:.2f} MB"
+                    )
+
+                    transcript = (
+                        client.audio.transcriptions.create(
+                            file=audio_file,
+                            model="whisper-1",
+                            response_format="verbose_json",
+                            timestamp_granularities=["segment"]
+                        )
+                    )
 
 
-    except Exception as e:
+                # ------------------------------------------------
+                # SEGMENTY
+                # ------------------------------------------------
 
-        st.error(
-            "Wystąpił błąd podczas przetwarzania pliku."
-        )
+                segments = [
+                    {
+                        "start": segment.start,
+                        "end": segment.end,
+                        "text": segment.text.strip()
+                    }
+                    for segment in transcript.segments
+                ]
 
-        st.exception(e)
 
-        st.stop()
+                if not segments:
+                    raise ValueError(
+                        "Transkrypcja nie zawiera żadnych segmentów."
+                    )
+
+
+                detected_language = (
+                    transcript.language
+                    if transcript.language
+                    else "unknown"
+                )
+
+
+                st.write(
+                    f"🌐 Wykryty język: **{detected_language}**"
+                )
+
+
+                # ------------------------------------------------
+                # PLIK TXT
+                # ------------------------------------------------
+
+                st.write(
+                    "📝 Tworzenie pliku TXT..."
+                )
+
+                with open(
+                    txt_path,
+                    "w",
+                    encoding="utf-8"
+                ) as txt_file:
+
+                    for segment in segments:
+
+                        start_time = formatuj_czas_srt(
+                            segment["start"]
+                        )
+
+                        end_time = formatuj_czas_srt(
+                            segment["end"]
+                        )
+
+                        txt_file.write(
+                            f"{start_time} - "
+                            f"{end_time} - "
+                            f"{segment['text'].strip()}\n"
+                        )
+
+
+                # ------------------------------------------------
+                # PLIK SRT
+                # ------------------------------------------------
+
+                st.write(
+                    "🎞️ Tworzenie pliku SRT..."
+                )
+
+                srt_content = utworz_srt(
+                    segments
+                )
+
+                with open(
+                    srt_path,
+                    "w",
+                    encoding="utf-8"
+                ) as srt_file:
+
+                    srt_file.write(
+                        srt_content
+                    )
+
+
+                # ------------------------------------------------
+                # TŁUMACZENIE NA POLSKI
+                # ------------------------------------------------
+
+                translated_srt_content = None
+
+                language_lower = detected_language.lower()
+
+                if language_lower not in (
+                    "polish",
+                    "polski",
+                    "pl"
+                ):
+
+                    st.write(
+                        "🇵🇱 Tłumaczenie napisów na język polski..."
+                    )
+
+                    translated_segments = (
+                        przetlumacz_segmenty(
+                            client,
+                            segments,
+                            detected_language
+                        )
+                    )
+
+                    translated_srt_content = (
+                        utworz_srt(
+                            translated_segments
+                        )
+                    )
+
+                    with open(
+                        translated_srt_path,
+                        "w",
+                        encoding="utf-8"
+                    ) as translated_file:
+
+                        translated_file.write(
+                            translated_srt_content
+                        )
+
+
+                # ------------------------------------------------
+                # OSADZENIE NAPISÓW W MP4
+                # ------------------------------------------------
+
+                st.write(
+                    "🎬 Osadzanie napisów w pliku MP4..."
+                )
+
+                ffmpeg_command = [
+                    "ffmpeg",
+                    "-y",
+
+                    "-i",
+                    video_path,
+
+                    "-i",
+                    srt_path,
+
+                    "-map",
+                    "0:v",
+
+                    "-map",
+                    "0:a?",
+
+                    "-map",
+                    "1:0",
+
+                    "-c:v",
+                    "copy",
+
+                    "-c:a",
+                    "copy",
+
+                    "-c:s",
+                    "mov_text",
+
+                    "-metadata:s:s:0",
+                    "language=und",
+
+                    "-metadata:s:s:0",
+                    f"title=Napisy {detected_language}",
+
+                    output_mp4_path
+                ]
+
+
+                subprocess.run(
+                    ffmpeg_command,
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE
+                )
+
+
+                # ------------------------------------------------
+                # ZAPIS W SESSION STATE
+                # ------------------------------------------------
+
+                st.session_state.wyniki = {
+                    "audio_path": audio_path,
+                    "txt_path": txt_path,
+                    "srt_path": srt_path,
+                    "translated_srt_path": (
+                        translated_srt_path
+                        if translated_srt_content is not None
+                        else None
+                    ),
+                    "output_mp4_path": output_mp4_path,
+                    "original_name": original_name,
+                    "language": detected_language
+                }
+
+                st.session_state.przetwarzanie_zakonczone = True
+
+                st.rerun()
+
+
+        except Exception as e:
+
+            st.error(
+                "Wystąpił błąd podczas przetwarzania pliku."
+            )
+
+            st.exception(e)
+
+            st.stop()
 
 # ============================================================
 # WYNIKI
@@ -615,151 +649,151 @@ if uploaded_file is not None:
 if st.session_state.przetwarzanie_zakonczone:
     st.success(
     """
-Przetwarzanie zakończone.
+    Przetwarzanie zakończone.
 
-Wygenerowane pliki są dostępne poniżej.
-"""
+    Wygenerowane pliki są dostępne poniżej.
+    """
     )
 
-wyniki = st.session_state.wyniki
+    wyniki = st.session_state.wyniki
+    audio_path = wyniki["audio_path"]
+
+    # ========================================================
+    # MP3
+    # ========================================================
+    #st.stop()
 
 
-# ========================================================
-# MP3
-# ========================================================
-st.stop()
-audio_path = wyniki["audio_path"]
+    if os.path.exists(audio_path):
 
-if os.path.exists(audio_path):
+        with open(
+            audio_path,
+            "rb"
+        ) as file:
 
-    with open(
-        audio_path,
-        "rb"
-    ) as file:
+            st.download_button(
+                label="⬇️ Pobierz MP3",
+                data=file.read(),
+                file_name=os.path.basename(
+                    audio_path
+                ),
+                mime="audio/mpeg",
+                use_container_width=True
+            )
+
+
+    # ========================================================
+    # TXT
+    # ========================================================
+
+    txt_path = wyniki["txt_path"]
+
+    if os.path.exists(txt_path):
+
+        with open(
+            txt_path,
+            "rb"
+        ) as file:
+
+            st.download_button(
+                label="⬇️ Pobierz TXT",
+                data=file.read(),
+                file_name=os.path.basename(
+                    txt_path
+                ),
+                mime="text/plain",
+                use_container_width=True
+            )
+
+
+    # ========================================================
+    # ORYGINALNY SRT
+    # ========================================================
+
+    srt_path = wyniki["srt_path"]
+
+    if os.path.exists(srt_path):
+
+        with open(
+            srt_path,
+            "rb"
+        ) as file:
+
+            st.download_button(
+                label="⬇️ Pobierz SRT",
+                data=file.read(),
+                file_name=os.path.basename(
+                    srt_path
+                ),
+                mime="application/x-subrip",
+                use_container_width=True
+            )
+
+
+    # ========================================================
+    # TŁUMACZONY SRT
+    # ========================================================
+
+    translated_srt_path = (
+        wyniki["translated_srt_path"]
+    )
+
+    if (
+        translated_srt_path
+        and os.path.exists(translated_srt_path)
+    ):
 
         st.download_button(
-            label="⬇️ Pobierz MP3",
-            data=file.read(),
+            label="🇵🇱 Pobierz SRT po polsku",
+            data=open(
+                translated_srt_path,
+                "rb"
+            ).read(),
             file_name=os.path.basename(
-                audio_path
-            ),
-            mime="audio/mpeg",
-            use_container_width=True
-        )
-
-
-# ========================================================
-# TXT
-# ========================================================
-
-txt_path = wyniki["txt_path"]
-
-if os.path.exists(txt_path):
-
-    with open(
-        txt_path,
-        "rb"
-    ) as file:
-
-        st.download_button(
-            label="⬇️ Pobierz TXT",
-            data=file.read(),
-            file_name=os.path.basename(
-                txt_path
-            ),
-            mime="text/plain",
-            use_container_width=True
-        )
-
-
-# ========================================================
-# ORYGINALNY SRT
-# ========================================================
-
-srt_path = wyniki["srt_path"]
-
-if os.path.exists(srt_path):
-
-    with open(
-        srt_path,
-        "rb"
-    ) as file:
-
-        st.download_button(
-            label="⬇️ Pobierz SRT",
-            data=file.read(),
-            file_name=os.path.basename(
-                srt_path
+                translated_srt_path
             ),
             mime="application/x-subrip",
             use_container_width=True
         )
 
 
-# ========================================================
-# TŁUMACZONY SRT
-# ========================================================
+    # ========================================================
+    # MP4 Z NAPISAMI
+    # ========================================================
 
-translated_srt_path = (
-    wyniki["translated_srt_path"]
-)
-
-if (
-    translated_srt_path
-    and os.path.exists(translated_srt_path)
-):
-
-    st.download_button(
-        label="🇵🇱 Pobierz SRT po polsku",
-        data=open(
-            translated_srt_path,
-            "rb"
-        ).read(),
-        file_name=os.path.basename(
-            translated_srt_path
-        ),
-        mime="application/x-subrip",
-        use_container_width=True
+    output_mp4_path = (
+        wyniki["output_mp4_path"]
     )
 
+    if os.path.exists(output_mp4_path):
 
-# ========================================================
-# MP4 Z NAPISAMI
-# ========================================================
+        with open(
+            output_mp4_path,
+            "rb"
+        ) as file:
 
-output_mp4_path = (
-    wyniki["output_mp4_path"]
-)
-
-if os.path.exists(output_mp4_path):
-
-    with open(
-        output_mp4_path,
-        "rb"
-    ) as file:
-
-        st.download_button(
-            label="🎬 Pobierz MP4 z napisami",
-            data=file.read(),
-            file_name=os.path.basename(
-                output_mp4_path
-            ),
-            mime="video/mp4",
-            use_container_width=True
-        )
+            st.download_button(
+                label="🎬 Pobierz MP4 z napisami",
+                data=file.read(),
+                file_name=os.path.basename(
+                    output_mp4_path
+                ),
+                mime="video/mp4",
+                use_container_width=True
+            )
 
 
-# ========================================================
-# INFORMACJA
-# ========================================================
+    # ========================================================
+    # INFORMACJA
+    # ========================================================
 
-st.info(
+    st.info(
+        """
+    Jeśli chcesz wybrać kolejny plik wciśnij Tak.
+
+    Jeśli chcesz zakończyć wciśnij Nie.
     """
-Jeśli chcesz wybrać kolejny plik wciśnij Tak.
-
-Jeśli chcesz zakończyć wciśnij Nie.
-"""
-)
+    )
 
 # ========================================================
 # PRZYCISKI TAK / NIE
@@ -791,6 +825,9 @@ with col2:
         st.session_state.przetwarzanie_zakonczone = False
         st.session_state.wyniki = None
 
+        #st.info("Proszę samodzielnie zamknąć okno przeglądarki")
         st.rerun()
+        
+        #st.info("Proszę samodzielnie zamknąć okno przeglądarki")
 
         st.stop()
